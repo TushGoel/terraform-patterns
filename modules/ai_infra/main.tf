@@ -94,6 +94,10 @@ resource "aws_sagemaker_model" "main" {
   name               = "${var.name}-model"
   execution_role_arn = aws_iam_role.sagemaker[0].arn
 
+  # Blocks the container's outbound internet access — the model is loaded
+  # from the S3 artifact above, so it has no legitimate need to call out.
+  enable_network_isolation = true
+
   primary_container {
     image          = var.sagemaker_container_image
     model_data_url = var.sagemaker_model_s3_uri
@@ -103,9 +107,20 @@ resource "aws_sagemaker_model" "main" {
   tags = var.tags
 }
 
+# CMK for the SageMaker endpoint's ML storage volume — encrypts data at rest
+# beyond the default AWS-managed key.
+resource "aws_kms_key" "ai_infra" {
+  count               = var.sagemaker_model_s3_uri != null || length(var.model_config_parameters) > 0 ? 1 : 0
+  description         = "CMK for ${var.name} SageMaker endpoint storage and SSM parameters"
+  enable_key_rotation = true
+
+  tags = var.tags
+}
+
 resource "aws_sagemaker_endpoint_configuration" "main" {
-  count = var.sagemaker_model_s3_uri != null ? 1 : 0
-  name  = "${var.name}-endpoint-config"
+  count       = var.sagemaker_model_s3_uri != null ? 1 : 0
+  name        = "${var.name}-endpoint-config"
+  kms_key_arn = aws_kms_key.ai_infra[0].arn
 
   production_variants {
     variant_name           = "primary"
@@ -163,9 +178,10 @@ resource "aws_appautoscaling_policy" "sagemaker" {
 resource "aws_ssm_parameter" "model_config" {
   for_each = nonsensitive(var.model_config_parameters)
 
-  name  = "/${var.name}/model-config/${each.key}"
-  type  = "SecureString"
-  value = each.value
+  name   = "/${var.name}/model-config/${each.key}"
+  type   = "SecureString"
+  value  = each.value
+  key_id = aws_kms_key.ai_infra[0].arn
 
   tags = var.tags
 }

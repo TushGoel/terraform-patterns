@@ -21,6 +21,49 @@ terraform {
 
 # ── Lambda ────────────────────────────────────────────────────────────────────
 
+# CMK for Lambda environment variable encryption — reused for the ECS/Lambda
+# CloudWatch log group below since both are scoped to this same workload.
+resource "aws_kms_key" "compute" {
+  count               = var.lambda_config != null || var.ecs_config != null ? 1 : 0
+  description         = "CMK for ${var.name} Lambda env vars and CloudWatch Logs"
+  enable_key_rotation = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AccountRootAdmin"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchLogs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*",
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
+      },
+    ]
+  })
+
+  tags = var.tags
+}
+
 resource "aws_lambda_function" "main" {
   count = var.lambda_config != null ? 1 : 0
 
@@ -52,9 +95,35 @@ resource "aws_lambda_function" "main" {
     variables = var.lambda_config.environment_vars
   }
 
+  # Customer-managed key for env var encryption at rest (default is an
+  # AWS-managed key, which is fine for most cases but fails a CMK-required policy)
+  kms_key_arn = aws_kms_key.compute[0].arn
+
+  # Full request tracing — cheap and makes latency debugging tractable.
+  # Requires xray:PutTraceSegments on execution_role_arn.
+  tracing_config {
+    mode = "Active"
+  }
+
   dead_letter_config {
     target_arn = aws_sqs_queue.dlq[0].arn
   }
+
+  # VPC attachment is opt-in: only wire it up if the caller passed subnet IDs,
+  # since most event-driven Lambdas (SQS/API triggers, no private resources
+  # to reach) don't need VPC egress and gain nothing from NAT cost/latency.
+  dynamic "vpc_config" {
+    for_each = length(var.lambda_subnet_ids) > 0 ? [1] : []
+    content {
+      subnet_ids         = var.lambda_subnet_ids
+      security_group_ids = var.security_group_ids
+    }
+  }
+
+  # Code signing is opt-in: it requires the caller to run deployment
+  # artifacts through an AWS Signer pipeline, which is a deployment-process
+  # decision this generic module shouldn't force on every consumer.
+  code_signing_config_arn = var.lambda_code_signing_config_arn
 
   tags = var.tags
 
@@ -68,6 +137,8 @@ resource "aws_sqs_queue" "dlq" {
 
   # Retain failed messages for 14 days (max) for debugging
   message_retention_seconds = 1209600
+
+  sqs_managed_sse_enabled = true
 
   tags = var.tags
 }
@@ -134,7 +205,8 @@ resource "aws_ecs_task_definition" "main" {
 resource "aws_cloudwatch_log_group" "ecs" {
   count             = var.ecs_config != null ? 1 : 0
   name              = "/ecs/${var.name}"
-  retention_in_days = 30
+  retention_in_days = 365
+  kms_key_id        = aws_kms_key.compute[0].arn
   tags              = var.tags
 }
 
@@ -185,3 +257,4 @@ resource "aws_appautoscaling_policy" "ecs_cpu" {
 }
 
 data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}

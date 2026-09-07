@@ -83,8 +83,8 @@ module "ai_infra" {
   sagemaker_max_capacity        = 4
 
   model_config_parameters = {
-    "max-tokens"   = "4096"
-    "temperature"  = "0.0"
+    "max-tokens"    = "4096"
+    "temperature"   = "0.0"
     "system-prompt" = "You are a production AI assistant."
   }
 

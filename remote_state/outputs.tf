@@ -15,7 +15,7 @@ output "lock_table_name" {
 
 output "backend_config" {
   description = "Backend configuration block — copy into your Terraform root module"
-  value = <<-EOT
+  value       = <<-EOT
     terraform {
       backend "s3" {
         bucket         = "${aws_s3_bucket.state.id}"

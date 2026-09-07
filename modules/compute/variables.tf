@@ -15,9 +15,21 @@ variable "subnet_ids" {
 }
 
 variable "security_group_ids" {
-  description = "Security group IDs for ECS service"
+  description = "Security group IDs for ECS service (and Lambda, if lambda_subnet_ids is set)"
   type        = list(string)
   default     = []
+}
+
+variable "lambda_subnet_ids" {
+  description = "Subnet IDs to attach the Lambda to. Leave empty to skip VPC attachment — only needed if the function must reach private VPC resources."
+  type        = list(string)
+  default     = []
+}
+
+variable "lambda_code_signing_config_arn" {
+  description = "ARN of an aws_lambda_code_signing_config to enforce signed deployment packages. Leave null to skip — requires an AWS Signer pipeline."
+  type        = string
+  default     = null
 }
 
 variable "lambda_config" {

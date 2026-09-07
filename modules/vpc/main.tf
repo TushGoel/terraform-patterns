@@ -23,6 +23,71 @@ resource "aws_vpc" "main" {
   })
 }
 
+# Lock down the default security group — it's created automatically by AWS
+# and must not be left open. Nothing should use the default SG; workloads
+# get purpose-built security groups instead.
+resource "aws_default_security_group" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = merge(var.tags, {
+    Name = "${var.name}-default-sg-locked-down"
+  })
+}
+
+# VPC Flow Logs — required for network audit trail and incident investigation
+resource "aws_cloudwatch_log_group" "flow_logs" {
+  name              = "/vpc/${var.name}/flow-logs"
+  retention_in_days = 365
+
+  tags = var.tags
+}
+
+resource "aws_iam_role" "flow_logs" {
+  name = "${var.name}-flow-logs-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "vpc-flow-logs.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy" "flow_logs" {
+  name = "${var.name}-flow-logs-policy"
+  role = aws_iam_role.flow_logs.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+      ]
+      Resource = "${aws_cloudwatch_log_group.flow_logs.arn}:*"
+    }]
+  })
+}
+
+resource "aws_flow_log" "main" {
+  vpc_id               = aws_vpc.main.id
+  traffic_type         = "ALL"
+  log_destination_type = "cloud-watch-logs"
+  log_destination      = aws_cloudwatch_log_group.flow_logs.arn
+  iam_role_arn         = aws_iam_role.flow_logs.arn
+
+  tags = merge(var.tags, {
+    Name = "${var.name}-flow-log"
+  })
+}
+
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
@@ -37,7 +102,9 @@ resource "aws_subnet" "public" {
   cidr_block        = cidrsubnet(var.cidr_block, 4, count.index)
   availability_zone = var.availability_zones[count.index]
 
-  map_public_ip_on_launch = true
+  # Public IP assigned explicitly at instance/ALB creation, not automatically
+  # on every launch — reduces accidental exposure surface.
+  map_public_ip_on_launch = false
 
   tags = merge(var.tags, {
     Name = "${var.name}-public-${var.availability_zones[count.index]}"

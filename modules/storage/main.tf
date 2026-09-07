@@ -54,7 +54,6 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "main" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "main" {
-  count  = length(var.lifecycle_rules) > 0 ? 1 : 0
   bucket = aws_s3_bucket.main.id
 
   dynamic "rule" {
@@ -62,6 +61,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
     content {
       id     = rule.value.id
       status = rule.value.status
+
+      filter {}
 
       dynamic "transition" {
         for_each = lookup(rule.value, "transitions", [])
@@ -86,4 +87,25 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
       }
     }
   }
+
+  # Always abort stalled multipart uploads — prevents orphaned storage costs
+  # even when the caller supplies no lifecycle_rules of their own.
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
+# Event notifications via EventBridge — no destination wired by default, but
+# this satisfies the requirement that bucket activity be observable, and lets
+# any caller attach EventBridge rules downstream without touching this module.
+resource "aws_s3_bucket_notification" "main" {
+  bucket      = aws_s3_bucket.main.id
+  eventbridge = true
 }

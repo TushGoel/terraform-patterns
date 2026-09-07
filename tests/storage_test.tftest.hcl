@@ -50,7 +50,7 @@ run "encryption_always_enabled" {
   assert {
     condition = (
       aws_s3_bucket_server_side_encryption_configuration.main.rule[0]
-        .apply_server_side_encryption_by_default[0].sse_algorithm == "AES256"
+      .apply_server_side_encryption_by_default[0].sse_algorithm == "AES256"
     )
     error_message = "S3 bucket must always have server-side encryption enabled"
   }

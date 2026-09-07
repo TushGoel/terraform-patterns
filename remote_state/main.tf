@@ -35,6 +35,23 @@ provider "aws" {
   region = var.region
 }
 
+# Customer-managed key for state bucket + lock table — shared because both
+# exist solely to support this same bootstrap, not because of a general rule.
+resource "aws_kms_key" "state" {
+  description         = "CMK for ${var.project} Terraform state bucket and lock table"
+  enable_key_rotation = true
+
+  tags = {
+    Purpose = "terraform-state-encryption"
+    Project = var.project
+  }
+}
+
+resource "aws_kms_alias" "state" {
+  name          = "alias/${var.project}-terraform-state"
+  target_key_id = aws_kms_key.state.key_id
+}
+
 resource "aws_s3_bucket" "state" {
   bucket        = "${var.project}-terraform-state-${var.account_id}"
   force_destroy = false
@@ -56,8 +73,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "state" {
   bucket = aws_s3_bucket.state.id
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.state.arn
     }
+    bucket_key_enabled = true
   }
 }
 
@@ -69,6 +88,26 @@ resource "aws_s3_bucket_public_access_block" "state" {
   restrict_public_buckets = true
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "state" {
+  bucket = aws_s3_bucket.state.id
+
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+}
+
+resource "aws_s3_bucket_notification" "state" {
+  bucket      = aws_s3_bucket.state.id
+  eventbridge = true
+}
+
 # DynamoDB for state locking — prevents concurrent applies from corrupting state
 resource "aws_dynamodb_table" "lock" {
   name         = "${var.project}-terraform-lock"
@@ -78,6 +117,15 @@ resource "aws_dynamodb_table" "lock" {
   attribute {
     name = "LockID"
     type = "S"
+  }
+
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.state.arn
+  }
+
+  point_in_time_recovery {
+    enabled = true
   }
 
   tags = {
