@@ -161,7 +161,7 @@ resource "aws_appautoscaling_policy" "sagemaker" {
 # ── Model Config in Parameter Store ─────────────────────────────────────────
 
 resource "aws_ssm_parameter" "model_config" {
-  for_each = var.model_config_parameters
+  for_each = nonsensitive(var.model_config_parameters)
 
   name  = "/${var.name}/model-config/${each.key}"
   type  = "SecureString"
