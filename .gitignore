@@ -1,0 +1,31 @@
+# Terraform state — never commit
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+.terraform/
+.terraform.lock.hcl
+
+# Plan files — never commit (may contain secrets)
+tfplan
+*.tfplan
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
