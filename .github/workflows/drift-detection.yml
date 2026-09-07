@@ -1,0 +1,115 @@
+name: Drift Detection
+
+# Run daily at 6am UTC — detects manual changes that diverge from Terraform state
+# A drift = someone made a manual change in the AWS console instead of via Terraform
+# Left undetected, drift causes the next terraform apply to revert or conflict
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:   # Allow manual trigger
+
+env:
+  TF_VERSION: "1.9.0"
+  AWS_REGION: "us-east-1"
+
+jobs:
+  detect-drift-prod:
+    name: Detect Drift — Production
+    runs-on: ubuntu-latest
+    environment: prod-plan
+    defaults:
+      run:
+        working-directory: environments/prod
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan — detect drift
+        id: plan
+        run: |
+          terraform plan \
+            -var="project=${{ vars.PROJECT_NAME }}" \
+            -detailed-exitcode \
+            -out=drift-check.tfplan \
+            2>&1 | tee plan_output.txt
+          echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Parse drift result
+        id: drift
+        run: |
+          EXIT_CODE="${{ steps.plan.outputs.exit_code }}"
+          if [ "$EXIT_CODE" == "0" ]; then
+            echo "status=no_drift" >> $GITHUB_OUTPUT
+            echo "No drift detected — infrastructure matches Terraform state"
+          elif [ "$EXIT_CODE" == "2" ]; then
+            echo "status=drift_detected" >> $GITHUB_OUTPUT
+            echo "DRIFT DETECTED — manual changes found outside Terraform"
+          else
+            echo "status=plan_failed" >> $GITHUB_OUTPUT
+            echo "Plan failed — check credentials and state"
+          fi
+
+      - name: Create GitHub Issue on drift
+        if: steps.drift.outputs.status == 'drift_detected'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('environments/prod/plan_output.txt', 'utf8');
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Infrastructure Drift Detected — Production (${new Date().toISOString().split('T')[0]})`,
+              body: `## Drift Detected in Production
+
+            Terraform plan found differences between the current infrastructure state and Terraform configuration.
+            This indicates manual changes were made outside of Terraform.
+
+            **Action required:** Review the plan output below and either:
+            1. Run \`terraform apply\` to revert manual changes back to Terraform state, OR
+            2. Update the Terraform configuration to reflect the intentional manual change
+
+            <details>
+            <summary>Plan Output</summary>
+
+            \`\`\`
+            ${planOutput.slice(0, 10000)}
+            \`\`\`
+
+            </details>
+
+            **Environment:** Production
+            **Detected at:** ${new Date().toISOString()}
+            **Workflow run:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`,
+              labels: ['infrastructure', 'drift', 'urgent']
+            });
+            console.log(`Created issue #${issue.data.number}`);
+
+      - name: Fail workflow on drift
+        if: steps.drift.outputs.status == 'drift_detected'
+        run: |
+          echo "Drift detected — see GitHub issue for details"
+          exit 1
+
+      - name: Post success summary
+        if: steps.drift.outputs.status == 'no_drift'
+        run: |
+          echo "## ✅ No Drift Detected" >> $GITHUB_STEP_SUMMARY
+          echo "Production infrastructure matches Terraform state." >> $GITHUB_STEP_SUMMARY
+          echo "Checked: $(date -u)" >> $GITHUB_STEP_SUMMARY
