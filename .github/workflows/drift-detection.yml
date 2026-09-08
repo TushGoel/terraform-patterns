@@ -17,6 +17,8 @@ jobs:
   detect-drift-prod:
     name: Detect Drift — Production
     runs-on: ubuntu-latest
+    # Skips gracefully if no AWS account is wired up yet — see README for setup.
+    if: ${{ vars.AWS_DEPLOYMENT_ENABLED == 'true' }}
     environment: prod-plan
     defaults:
       run:

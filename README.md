@@ -103,6 +103,11 @@ jobs:
 
 **Why:** `terraform apply` without a plan review is how production outages happen. Plan on PR = peer-reviewable infrastructure changes. Manual approval gate = no unilateral prod changes.
 
+**Running this against a real AWS account:** the `Plan — Dev`, `Plan — Prod`, `Apply — Prod`, and `Drift Detection` workflows are gated behind a repo variable, `AWS_DEPLOYMENT_ENABLED`, so they skip cleanly instead of failing when no AWS account is wired up (as in this portfolio repo). To activate them against a real account:
+1. Set up an AWS IAM OIDC identity provider trusting `token.actions.githubusercontent.com`, with IAM roles scoped to this repo.
+2. Add `AWS_ROLE_ARN_DEV` and `AWS_ROLE_ARN_PROD` as repo secrets, and `PROJECT_NAME` as a repo variable.
+3. Set the `AWS_DEPLOYMENT_ENABLED` repo variable to `true`.
+
 ---
 
 ### 5. AI Infrastructure Module
