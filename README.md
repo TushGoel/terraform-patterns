@@ -4,7 +4,7 @@
 ![Terraform](https://img.shields.io/badge/terraform-1.5%2B-purple)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Production Terraform patterns — reusable modules, remote state with locking, workspace-based environments, and CI/CD gates with manual approval for production. Includes AI/ML infrastructure patterns for SageMaker and Bedrock.
+Production Terraform patterns — reusable modules, remote state with locking, directory-based environments, and CI/CD gates with manual approval for production. Includes AI/ML infrastructure patterns for SageMaker and Bedrock.
 
 ---
 
@@ -13,7 +13,7 @@ Production Terraform patterns — reusable modules, remote state with locking, w
 | | |
 |---|---|
 | **Problem** | Ad-hoc infrastructure definitions aren't reusable. Local state means one engineer's laptop owns your infrastructure. No CI/CD gates means unapproved changes reach production. |
-| **Solution** | Composable modules with validated inputs, S3+DynamoDB remote state with locking, workspace-based environment management, and a GitHub Actions pipeline with plan-on-PR and manual approval before prod apply. |
+| **Solution** | Composable modules with validated inputs, S3+DynamoDB remote state with locking, directory-based environment management, and a GitHub Actions pipeline with plan-on-PR and manual approval before prod apply. |
 | **Impact** | Infrastructure is version-controlled, peer-reviewed, and auditable. Concurrent applies are serialized. Production changes require explicit human approval. |
 
 ---
@@ -155,7 +155,6 @@ terraform-patterns/
 │   └── ai_infra/         # SageMaker endpoint + Bedrock IAM + autoscaling + Parameter Store
 ├── environments/
 │   ├── dev/              # Dev: single AZ, no autoscaling, force_destroy=true
-│   ├── staging/          # Staging: mirrors prod at reduced capacity
 │   └── prod/             # Prod: multi-AZ, autoscaling, KMS encryption
 ├── remote_state/         # Bootstrap S3 backend + DynamoDB lock table
 ├── tests/                # terraform test (v1.6+): vpc, storage, IAM assertions
