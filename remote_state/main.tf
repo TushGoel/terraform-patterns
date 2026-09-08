@@ -41,11 +41,26 @@ resource "aws_kms_key" "state" {
   description         = "CMK for ${var.project} Terraform state bucket and lock table"
   enable_key_rotation = true
 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AccountRootAdmin"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+    ]
+  })
+
   tags = {
     Purpose = "terraform-state-encryption"
     Project = var.project
   }
 }
+
+data "aws_caller_identity" "current" {}
 
 resource "aws_kms_alias" "state" {
   name          = "alias/${var.project}-terraform-state"

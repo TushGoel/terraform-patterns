@@ -114,8 +114,23 @@ resource "aws_kms_key" "ai_infra" {
   description         = "CMK for ${var.name} SageMaker endpoint storage and SSM parameters"
   enable_key_rotation = true
 
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AccountRootAdmin"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+    ]
+  })
+
   tags = var.tags
 }
+
+data "aws_caller_identity" "current" {}
 
 resource "aws_sagemaker_endpoint_configuration" "main" {
   count       = var.sagemaker_model_s3_uri != null ? 1 : 0

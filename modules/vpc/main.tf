@@ -34,10 +34,53 @@ resource "aws_default_security_group" "main" {
   })
 }
 
+# CMK for flow-log encryption — CloudWatch Logs needs an explicit key policy
+# statement since it accesses the key as a service principal, not as the caller.
+resource "aws_kms_key" "flow_logs" {
+  description         = "CMK for ${var.name} VPC flow logs"
+  enable_key_rotation = true
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AccountRootAdmin"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid    = "AllowCloudWatchLogs"
+        Effect = "Allow"
+        Principal = {
+          Service = "logs.${data.aws_region.current.name}.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*",
+        ]
+        Resource = "*"
+        Condition = {
+          ArnLike = {
+            "kms:EncryptionContext:aws:logs:arn" = "arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:*"
+          }
+        }
+      },
+    ]
+  })
+
+  tags = var.tags
+}
+
 # VPC Flow Logs — required for network audit trail and incident investigation
 resource "aws_cloudwatch_log_group" "flow_logs" {
   name              = "/vpc/${var.name}/flow-logs"
   retention_in_days = 365
+  kms_key_id        = aws_kms_key.flow_logs.arn
 
   tags = var.tags
 }
@@ -185,3 +228,6 @@ resource "aws_route_table_association" "private" {
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
+
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}

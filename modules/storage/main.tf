@@ -85,6 +85,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "main" {
           noncurrent_days = rule.value.noncurrent_version_expiration_days
         }
       }
+
+      abort_incomplete_multipart_upload {
+        days_after_initiation = 7
+      }
     }
   }
 
