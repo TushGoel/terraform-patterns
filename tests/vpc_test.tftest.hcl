@@ -24,6 +24,24 @@ provider "aws" {
   }
 }
 
+# skip_requesting_account_id only affects the provider's own ARN-building
+# logic — it does not stop an explicit `data "aws_caller_identity"` block
+# from making a real STS call during plan. Override both data sources so
+# the module can be planned fully offline.
+override_data {
+  target = data.aws_caller_identity.current
+  values = {
+    account_id = "123456789012"
+  }
+}
+
+override_data {
+  target = data.aws_region.current
+  values = {
+    name = "us-east-1"
+  }
+}
+
 run "vpc_has_correct_cidr" {
   command = plan
 
