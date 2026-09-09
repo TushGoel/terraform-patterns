@@ -37,6 +37,11 @@ jobs:
             cd ../..
           done
 
+      - name: Terraform Test
+        run: |
+          terraform init -backend=false
+          terraform test
+
   plan-dev:
     name: Plan — Dev
     runs-on: ubuntu-latest
