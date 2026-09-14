@@ -1,7 +1,7 @@
 # Dev environment — same modules as prod, reduced capacity and cost
 #
 # Key differences from prod:
-# - Single AZ (saves NAT gateway cost ~$32/month)
+# - NAT gateway disabled (saves ~$32/month; private subnets have no egress)
 # - No SageMaker autoscaling
 # - Shorter lifecycle retention
 # - No KMS encryption (SSE-S3 sufficient for dev)

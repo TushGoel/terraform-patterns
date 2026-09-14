@@ -154,8 +154,8 @@ terraform-patterns/
 │   ├── compute/          # Lambda (DLQ, reserved concurrency) + ECS Fargate (autoscaling)
 │   └── ai_infra/         # SageMaker endpoint + Bedrock IAM + autoscaling + Parameter Store
 ├── environments/
-│   ├── dev/              # Dev: single AZ, no autoscaling, force_destroy=true
-│   └── prod/             # Prod: multi-AZ, autoscaling, KMS encryption
+│   ├── dev/              # Dev: 2 AZs, no NAT gateway, no autoscaling, force_destroy=true
+│   └── prod/             # Prod: multi-AZ, autoscaling, NAT gateway enabled
 ├── remote_state/         # Bootstrap S3 backend + DynamoDB lock table
 ├── tests/                # terraform test (v1.6+): vpc, storage, IAM assertions
 └── .github/workflows/

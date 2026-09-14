@@ -3,7 +3,7 @@
 # Provisions infrastructure for AI/ML systems:
 # - SageMaker endpoint with auto-scaling (model serving)
 # - Bedrock-enabled IAM role (foundation model access)
-# - GPU-optimized EC2 launch template (training/inference)
+# - GPU-backed SageMaker instance types for training/inference (ml.g4dn/ml.p3 — not a raw EC2 launch template)
 # - Parameter Store entries for model config (no secrets in Terraform state)
 #
 # Design decisions:
